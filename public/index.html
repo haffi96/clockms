@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digital Clock</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --bg-color: #ffffff;
+        --text-color: #000000;
+        --accent-color: #3b82f6;
+        --button-bg: #f3f4f6;
+        --button-hover: #e5e7eb;
+      }
+
+      [data-theme="dark"] {
+        --bg-color: #0f172a;
+        --text-color: #f8fafc;
+        --accent-color: #60a5fa;
+        --button-bg: #334155;
+        --button-hover: #475569;
+      }
+
+      body {
+        font-family: "Courier New", monospace;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.3s ease, color 0.3s ease;
+        padding: 20px;
+      }
+
+      .theme-toggle {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: var(--button-bg);
+        border: none;
+        border-radius: 8px;
+        padding: 12px;
+        cursor: pointer;
+        font-size: 18px;
+        transition: background-color 0.3s ease;
+      }
+
+      .theme-toggle:hover {
+        background: var(--button-hover);
+      }
+
+      .clock-container {
+        text-align: center;
+        max-width: 100%;
+      }
+
+      .clock {
+        font-size: clamp(2rem, 8vw, 6rem);
+        font-weight: bold;
+        letter-spacing: 0.1em;
+        margin-bottom: 20px;
+        word-break: break-all;
+      }
+
+      .milliseconds {
+        color: var(--accent-color);
+      }
+
+      .date {
+        font-size: clamp(1rem, 4vw, 1.5rem);
+        opacity: 0.8;
+        margin-top: 10px;
+      }
+
+      /* Mobile optimizations */
+      @media (max-width: 768px) {
+        .theme-toggle {
+          top: 15px;
+          right: 15px;
+          padding: 10px;
+          font-size: 16px;
+        }
+
+        body {
+          padding: 15px;
+        }
+
+        .clock {
+          line-height: 1.1;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .clock {
+          font-size: clamp(1.5rem, 10vw, 4rem);
+        }
+
+        .date {
+          font-size: clamp(0.9rem, 5vw, 1.2rem);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <button
+      class="theme-toggle"
+      onclick="toggleTheme()"
+      aria-label="Toggle dark mode"
+    >
+      🌙
+    </button>
+
+    <div class="clock-container">
+      <div class="clock" id="clock">
+        <span id="time">00:00:00</span
+        ><span class="milliseconds" id="milliseconds">.000</span>
+      </div>
+      <div class="date" id="date"></div>
+    </div>
+
+    <script>
+      // Theme management
+      function toggleTheme() {
+        const body = document.body;
+        const button = document.querySelector(".theme-toggle");
+        const isDark = body.getAttribute("data-theme") === "dark";
+
+        if (isDark) {
+          body.removeAttribute("data-theme");
+          button.textContent = "🌙";
+          localStorage.setItem("theme", "light");
+        } else {
+          body.setAttribute("data-theme", "dark");
+          button.textContent = "☀️";
+          localStorage.setItem("theme", "dark");
+        }
+      }
+
+      function loadTheme() {
+        const savedTheme = localStorage.getItem("theme");
+        const button = document.querySelector(".theme-toggle");
+
+        // Check system preference if no saved theme
+        const prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)"
+        ).matches;
+        const shouldUseDark =
+          savedTheme === "dark" || (savedTheme === null && prefersDark);
+
+        if (shouldUseDark) {
+          document.body.setAttribute("data-theme", "dark");
+          button.textContent = "☀️";
+        } else {
+          button.textContent = "🌙";
+        }
+      }
+
+      // Clock functionality
+      function updateClock() {
+        const now = new Date();
+
+        // Format time
+        const hours = now.getHours().toString().padStart(2, "0");
+        const minutes = now.getMinutes().toString().padStart(2, "0");
+        const seconds = now.getSeconds().toString().padStart(2, "0");
+        const milliseconds = now.getMilliseconds().toString().padStart(3, "0");
+
+        // Format date
+        const options = {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        };
+        const dateString = now.toLocaleDateString("en-US", options);
+
+        // Update display
+        document.getElementById(
+          "time"
+        ).textContent = `${hours}:${minutes}:${seconds}`;
+        document.getElementById(
+          "milliseconds"
+        ).textContent = `.${milliseconds}`;
+        document.getElementById("date").textContent = dateString;
+      }
+
+      // Initialize
+      loadTheme();
+      updateClock();
+
+      // Update clock every 10ms for smooth milliseconds
+      setInterval(updateClock, 10);
+    </script>
+  </body>
+</html>
