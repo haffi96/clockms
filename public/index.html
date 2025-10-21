@@ -80,6 +80,57 @@
         margin-top: 10px;
       }
 
+      .sync-status {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: var(--button-bg);
+        transition: all 0.3s ease;
+      }
+
+      .sync-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        transition: background-color 0.3s ease;
+      }
+
+      .sync-indicator.synced {
+        background-color: #10b981;
+      }
+
+      .sync-indicator.syncing {
+        background-color: #f59e0b;
+        animation: pulse 1.5s infinite;
+      }
+
+      .sync-indicator.error {
+        background-color: #ef4444;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .sync-info {
+        font-size: 12px;
+        opacity: 0.7;
+        margin-top: 15px;
+        text-align: center;
+      }
+
       /* Mobile optimizations */
       @media (max-width: 768px) {
         .theme-toggle {
@@ -87,6 +138,13 @@
           right: 15px;
           padding: 10px;
           font-size: 16px;
+        }
+
+        .sync-status {
+          top: 15px;
+          left: 15px;
+          font-size: 12px;
+          padding: 6px 10px;
         }
 
         body {
@@ -110,6 +168,11 @@
     </style>
   </head>
   <body>
+    <div class="sync-status" id="syncStatus">
+      <div class="sync-indicator" id="syncIndicator"></div>
+      <span id="syncText">Syncing...</span>
+    </div>
+
     <button
       class="theme-toggle"
       onclick="toggleTheme()"
@@ -124,9 +187,165 @@
         ><span class="milliseconds" id="milliseconds">.000</span>
       </div>
       <div class="date" id="date"></div>
+      <div class="sync-info" id="syncInfo"></div>
     </div>
 
     <script>
+      // Time synchronization system
+      class TimeSynchronizer {
+        constructor() {
+          this.timeOffset = 0;
+          this.lastSyncTime = 0;
+          this.syncAccuracy = null;
+          this.isOnline = navigator.onLine;
+          this.syncAttempts = 0;
+          this.maxSyncAttempts = 3;
+
+          // Multiple time sources for redundancy (local server first for best accuracy)
+          this.timeSources = [
+            // "/api/time", // Local server (best accuracy)
+            // "https://worldtimeapi.org/api/timezone/UTC",
+            "https://timeapi.io/api/Time/current/zone?timeZone=UTC",
+            // "https://api.ipgeolocation.io/timezone?apiKey=&tz=UTC",
+          ];
+
+          this.init();
+        }
+
+        async init() {
+          this.updateSyncStatus("syncing", "Synchronizing...");
+
+          // Listen for online/offline events
+          window.addEventListener("online", () => {
+            this.isOnline = true;
+            this.syncTime();
+          });
+
+          window.addEventListener("offline", () => {
+            this.isOnline = false;
+            this.updateSyncStatus("error", "Offline - Local Time");
+          });
+
+          // Initial sync
+          await this.syncTime();
+
+          // Periodic sync every 5 minutes
+          setInterval(() => this.syncTime(), 5 * 60 * 1000);
+        }
+
+        async syncTime() {
+          if (!this.isOnline) {
+            this.updateSyncStatus("error", "Offline - Local Time");
+            return;
+          }
+
+          this.updateSyncStatus("syncing", "Synchronizing...");
+
+          for (let attempt = 0; attempt < this.maxSyncAttempts; attempt++) {
+            try {
+              const syncResult = await this.fetchTimeFromSource(
+                this.timeSources[attempt % this.timeSources.length]
+              );
+              if (syncResult) {
+                this.timeOffset = syncResult.offset;
+                this.syncAccuracy = syncResult.accuracy;
+                this.lastSyncTime = Date.now();
+                this.syncAttempts = 0;
+
+                this.updateSyncStatus("synced", "Synchronized");
+                this.updateSyncInfo(syncResult.accuracy);
+                return;
+              }
+            } catch (error) {
+              console.warn(`Sync attempt ${attempt + 1} failed:`, error);
+            }
+          }
+
+          // All sync attempts failed
+          this.syncAttempts++;
+          this.updateSyncStatus("error", "Sync Failed - Local Time");
+          this.updateSyncInfo(null);
+        }
+
+        async fetchTimeFromSource(url) {
+          const startTime = performance.now();
+
+          try {
+            const response = await fetch(url, {
+              method: "GET",
+              cache: "no-cache",
+              headers: {
+                "Cache-Control": "no-cache",
+              },
+            });
+
+            const endTime = performance.now();
+            const networkLatency = (endTime - startTime) / 2; // Round trip time / 2
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const data = await response.json();
+            let serverTime;
+
+            // Parse different API response formats
+            if (data.timestamp) {
+              // Local server format (most accurate)
+              serverTime = data.timestamp;
+            } else if (data.datetime) {
+              // WorldTimeAPI format
+              serverTime = new Date(data.datetime).getTime();
+            } else if (data.dateTime) {
+              // TimeAPI.io format
+              serverTime = new Date(data.dateTime).getTime();
+            } else if (data.date_time) {
+              // ipgeolocation format
+              serverTime = new Date(data.date_time).getTime();
+            } else {
+              throw new Error("Unknown API response format");
+            }
+
+            // Compensate for network latency
+            const compensatedServerTime = serverTime + networkLatency;
+            const localTime = Date.now();
+            const offset = compensatedServerTime - localTime;
+
+            return {
+              offset: offset,
+              accuracy: Math.round(networkLatency),
+              source: url,
+            };
+          } catch (error) {
+            throw error;
+          }
+        }
+
+        getSynchronizedTime() {
+          return new Date(Date.now() + this.timeOffset);
+        }
+
+        updateSyncStatus(status, text) {
+          const indicator = document.getElementById("syncIndicator");
+          const statusText = document.getElementById("syncText");
+
+          // Remove all status classes
+          indicator.className = "sync-indicator";
+          // Add current status class
+          indicator.classList.add(status);
+          statusText.textContent = text;
+        }
+
+        updateSyncInfo(accuracy) {
+          const syncInfo = document.getElementById("syncInfo");
+
+          if (accuracy !== null) {
+            const lastSync = new Date(this.lastSyncTime).toLocaleTimeString();
+            syncInfo.textContent = `Last sync: ${lastSync} (±${accuracy}ms)`;
+          } else {
+            syncInfo.textContent = "Using local device time";
+          }
+        }
+      }
+
       // Theme management
       function toggleTheme() {
         const body = document.body;
@@ -163,9 +382,15 @@
         }
       }
 
+      // Global time synchronizer instance
+      let timeSynchronizer;
+
       // Clock functionality
       function updateClock() {
-        const now = new Date();
+        // Use synchronized time if available, otherwise fall back to local time
+        const now = timeSynchronizer
+          ? timeSynchronizer.getSynchronizedTime()
+          : new Date();
 
         // Format time
         const hours = now.getHours().toString().padStart(2, "0");
@@ -194,6 +419,7 @@
 
       // Initialize
       loadTheme();
+      timeSynchronizer = new TimeSynchronizer();
       updateClock();
 
       // Update clock every 10ms for smooth milliseconds
