@@ -201,9 +201,8 @@
           this.syncAttempts = 0;
           this.maxSyncAttempts = 3;
 
-          // Multiple time sources for redundancy (local server first for best accuracy)
+          // Multiple time sources for redundancy
           this.timeSources = [
-            // "/api/time", // Local server (best accuracy)
             // "https://worldtimeapi.org/api/timezone/UTC",
             "https://timeapi.io/api/Time/current/zone?timeZone=UTC",
             // "https://api.ipgeolocation.io/timezone?apiKey=&tz=UTC",
@@ -229,8 +228,8 @@
           // Initial sync
           await this.syncTime();
 
-          // Periodic sync every 5 minutes
-          setInterval(() => this.syncTime(), 5 * 60 * 1000);
+          // Periodic sync every 5 seconds (optimal for latency testing)
+          setInterval(() => this.syncTime(), 5 * 1000);
         }
 
         async syncTime() {
@@ -288,10 +287,7 @@
             let serverTime;
 
             // Parse different API response formats
-            if (data.timestamp) {
-              // Local server format (most accurate)
-              serverTime = data.timestamp;
-            } else if (data.datetime) {
+            if (data.datetime) {
               // WorldTimeAPI format
               serverTime = new Date(data.datetime).getTime();
             } else if (data.dateTime) {
